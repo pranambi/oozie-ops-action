@@ -135,7 +135,7 @@ jobs:
       - name: Update audit/audit_log_${{ github.event.inputs.environment }}.csv
         if: always()
         run: |
-          MAX_ROWS=6
+          MAX_ROWS=3
           ENV="${{ github.event.inputs.environment }}"
           AUDIT_FILE="audit/audit_log_${ENV}.csv"
           TIMESTAMP=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
