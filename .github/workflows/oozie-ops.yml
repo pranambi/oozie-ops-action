@@ -56,6 +56,7 @@ jobs:
           echo "## Approval Request Summary" >> $GITHUB_STEP_SUMMARY
           echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| Environment | **${{ github.event.inputs.environment }}** |" >> $GITHUB_STEP_SUMMARY
           echo "| Operation | **${{ github.event.inputs.operation }}** |" >> $GITHUB_STEP_SUMMARY
           echo "| Job ID | \`${{ github.event.inputs.job_id }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| Node | ${{ github.event.inputs.node_name || 'N/A' }} |" >> $GITHUB_STEP_SUMMARY
@@ -69,7 +70,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Approval granted
-        run: echo "Approval received for ${{ github.event.inputs.operation }} on job ${{ github.event.inputs.job_id }}"
+        run: echo "Approval received for ${{ github.event.inputs.operation }} on job ${{ github.event.inputs.job_id }} in ${{ github.event.inputs.environment }}"
 
   execute:
     needs: [validate, request-approval]
@@ -124,9 +125,10 @@ jobs:
       - name: Summary
         run: |
           echo "================================"
-          echo "Operation : ${{ github.event.inputs.operation }}"
-          echo "Job ID    : ${{ github.event.inputs.job_id }}"
-          echo "Node      : ${{ github.event.inputs.node_name || 'N/A' }}"
+          echo "Environment : ${{ github.event.inputs.environment }}"
+          echo "Operation   : ${{ github.event.inputs.operation }}"
+          echo "Job ID      : ${{ github.event.inputs.job_id }}"
+          echo "Node        : ${{ github.event.inputs.node_name || 'N/A' }}"
           echo "Triggered by: ${{ github.actor }}"
           echo "================================"
 
