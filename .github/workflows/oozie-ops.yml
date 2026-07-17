@@ -164,25 +164,34 @@ jobs:
 
       - name: Kill Oozie job
         if: github.event.inputs.operation == 'Kill'
-        run: oozie job -oozie "$OOZIE_URL" -kill "${{ github.event.inputs.job_id }}"
+        run: |
+          oozie job -oozie "$OOZIE_URL" -kill "${{ github.event.inputs.job_id }}"
+          echo "Kill executed on job ${{ github.event.inputs.job_id }}"
 
       - name: Suspend Oozie job
         if: github.event.inputs.operation == 'Suspend'
-        run: oozie job -oozie "$OOZIE_URL" -suspend "${{ github.event.inputs.job_id }}"
+        run: |
+          oozie job -oozie "$OOZIE_URL" -suspend "${{ github.event.inputs.job_id }}"
+          echo "Suspend executed on job ${{ github.event.inputs.job_id }}"
 
       - name: Resume Oozie job
         if: github.event.inputs.operation == 'Resume'
-        run: oozie job -oozie "$OOZIE_URL" -resume "${{ github.event.inputs.job_id }}"
+        run: |
+          oozie job -oozie "$OOZIE_URL" -resume "${{ github.event.inputs.job_id }}"
+          echo "Resume executed on job ${{ github.event.inputs.job_id }}"
 
       - name: Restart Oozie job from beginning
         if: github.event.inputs.operation == 'Restart'
         run: |
           oozie job -oozie "$OOZIE_URL" -kill "${{ github.event.inputs.job_id }}"
           oozie job -oozie "$OOZIE_URL" -rerun "${{ github.event.inputs.job_id }}"
+          echo "Restart executed on job ${{ github.event.inputs.job_id }}"
 
       - name: Restart failed node
         if: github.event.inputs.operation == 'Restart_failed_node'
-        run: oozie job -oozie "$OOZIE_URL" -rerun "${{ github.event.inputs.job_id }}" -rerun-fail-nodes
+        run: |
+          oozie job -oozie "$OOZIE_URL" -rerun "${{ github.event.inputs.job_id }}" -rerun-fail-nodes
+          echo "Restart_failed_node executed on job ${{ github.event.inputs.job_id }}, node ${{ github.event.inputs.node_name }}"
 
       - name: Summary
         run: |
