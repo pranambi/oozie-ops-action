@@ -32,7 +32,7 @@ on:
         type: string
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   validate:
@@ -196,15 +196,27 @@ jobs:
           echo "Triggered by: ${{ github.actor }}"
           echo "================================"
 
-      - name: Write to Hive audit table
+      - name: Write audit log
         if: always()
         env:
-          HIVESERVER2_URL: ${{ secrets.HIVESERVER2_URL }}
-          HIVE_USERNAME: ${{ secrets.HIVE_USERNAME }}
-          HIVE_PASSWORD: ${{ secrets.HIVE_PASSWORD }}
+          AUDIT_LOG_DIR: ${{ vars.AUDIT_LOG_DIR || '/mnt/cdp-ops-audit' }}
         run: |
-          TIMESTAMP=$(date -u +"%Y-%m-%d %H:%M:%S")
-          LOG_DATE=$(date -u +"%Y-%m-%d")
+          # ── Runner volume mount setup (one-time, done by you on the runner) ──
+          # Docker runner:
+          #   Add to docker run: -v /host/shared/cdp-ops-audit:/mnt/cdp-ops-audit
+          # Kubernetes runner (ARC):
+          #   Add to runner pod spec:
+          #     volumes:
+          #       - name: audit-logs
+          #         nfs:
+          #           server: <nfs-server>
+          #           path: /shared/cdp-ops-audit
+          #     volumeMounts:
+          #       - name: audit-logs
+          #         mountPath: /mnt/cdp-ops-audit
+          # ─────────────────────────────────────────────────────────────────────
+
+          TIMESTAMP=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
           ENV="${{ github.event.inputs.environment }}"
           OPERATION="${{ github.event.inputs.operation }}"
           JOB_ID="${{ github.event.inputs.job_id }}"
@@ -213,73 +225,13 @@ jobs:
           RUN_ID="${{ github.run_id }}"
           STATUS="${{ job.status }}"
 
-          INSERT_SQL="INSERT INTO ops_audit.cdp_ops_log PARTITION (log_date='$LOG_DATE') VALUES ('$TIMESTAMP', '$ENV', '$OPERATION', '$JOB_ID', '$NODE', '$ACTOR', '$RUN_ID', '$STATUS');"
+          AUDIT_FILE="$AUDIT_LOG_DIR/oozie-ops-$(date -u +%Y-%m).log"
+          ENTRY="$TIMESTAMP | $ENV | $OPERATION | $JOB_ID | $NODE | $ACTOR | $STATUS | run:$RUN_ID"
 
-          echo "========================================"
-          echo "  Hive Audit"
-          echo "========================================"
-          echo ""
-          echo "-- One-time table setup (run on your cluster):"
-          echo "CREATE DATABASE IF NOT EXISTS ops_audit;"
-          echo "CREATE TABLE IF NOT EXISTS ops_audit.cdp_ops_log ("
-          echo "    timestamp     STRING,"
-          echo "    environment   STRING,"
-          echo "    operation     STRING,"
-          echo "    job_id        STRING,"
-          echo "    node_name     STRING,"
-          echo "    triggered_by  STRING,"
-          echo "    github_run_id STRING,"
-          echo "    status        STRING"
-          echo ") PARTITIONED BY (log_date STRING)"
-          echo "  STORED AS ORC"
-          echo "  TBLPROPERTIES ('transactional'='true');"
-          echo ""
-          echo "-- INSERT for this run:"
-          echo "$INSERT_SQL"
-          echo ""
-          echo "-- beeline command:"
-          echo "beeline -u \"\$HIVESERVER2_URL\" -n \"\$HIVE_USERNAME\" -p \"\$HIVE_PASSWORD\" --silent=true -e \"$INSERT_SQL\""
-          echo "========================================"
-
-          if [ -z "$HIVESERVER2_URL" ]; then
-            echo "WARN: HIVESERVER2_URL secret not configured — skipping Hive write (demo mode)"
+          if [ ! -d "$AUDIT_LOG_DIR" ]; then
+            echo "WARN: '$AUDIT_LOG_DIR' not mounted — skipping audit (configure volume on runner)"
             exit 0
           fi
 
-          beeline -u "$HIVESERVER2_URL" -n "$HIVE_USERNAME" -p "$HIVE_PASSWORD" \
-            --silent=true \
-            -e "$INSERT_SQL"
-          echo "Hive audit record written to ops_audit.cdp_ops_log (partition: $LOG_DATE)"
-
-      - name: Update audit/oozie-ops/audit_log_${{ github.event.inputs.environment }}.csv
-        if: always()
-        run: |
-          MAX_ROWS=3
-          ENV="${{ github.event.inputs.environment }}"
-          AUDIT_FILE="audit/oozie-ops/audit_log_${ENV}.csv"
-          TIMESTAMP=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
-          STATUS="${{ job.status }}"
-          NEW_ENTRY="$TIMESTAMP,${{ github.event.inputs.environment }},${{ github.event.inputs.operation }},${{ github.event.inputs.job_id }},${{ github.event.inputs.node_name || 'N/A' }},${{ github.actor }},$STATUS"
-
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-          for i in 1 2 3; do
-            git fetch origin main
-            git checkout origin/main -- "$AUDIT_FILE" 2>/dev/null || echo "timestamp,environment,operation,job_id,node_name,triggered_by,status" > "$AUDIT_FILE"
-
-            echo "$NEW_ENTRY" >> "$AUDIT_FILE"
-
-            TOTAL=$(wc -l < "$AUDIT_FILE")
-            if [ "$TOTAL" -gt "$((MAX_ROWS + 1))" ]; then
-              head -1 "$AUDIT_FILE" > "$AUDIT_FILE.tmp"
-              tail -n "$MAX_ROWS" "$AUDIT_FILE" >> "$AUDIT_FILE.tmp"
-              mv "$AUDIT_FILE.tmp" "$AUDIT_FILE"
-            fi
-
-            git add "$AUDIT_FILE"
-            git commit -m "audit($ENV): ${{ github.event.inputs.operation }} on ${{ github.event.inputs.job_id }} by ${{ github.actor }}"
-            git push origin main && break
-            echo "Push conflict, retrying ($i/3)..."
-            git reset HEAD~1
-          done
+          flock -x "${AUDIT_FILE}.lock" -c "echo '$ENTRY' >> '$AUDIT_FILE'"
+          echo "Audit written → $AUDIT_FILE"
