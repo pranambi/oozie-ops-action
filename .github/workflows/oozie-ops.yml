@@ -71,7 +71,7 @@ jobs:
           if [ "$ENV" = "Prod" ]; then
             EXPECTED_USER="oozie"
           else
-            EXPECTED_USER="aaci_service_user1"
+            EXPECTED_USER="cicd_service_user1"
           fi
 
           echo "Environment: $ENV — expected job owner: $EXPECTED_USER"
@@ -98,7 +98,7 @@ jobs:
           if [ "$ENV" = "Prod" ]; then
             EXPECTED_USER="oozie"
           else
-            EXPECTED_USER="aaci_service_user1"
+            EXPECTED_USER="cicd_service_user1"
           fi
           echo "## Approval Request Summary" >> $GITHUB_STEP_SUMMARY
           echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
